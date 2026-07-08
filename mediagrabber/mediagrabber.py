@@ -3,6 +3,7 @@
 # and open the template in the editor.
 
 import argparse
+import json
 import logging
 import logging.handlers
 import os
@@ -238,7 +239,9 @@ class MediaGrabber:
         Parse commandline arguments
         """
         parser = argparse.ArgumentParser(description='A media grabber program')
-        parser.add_argument('-m', '--mode', choices=('import', 'index', 'reset'), default='import',
+        parser.add_argument('-c', '--config', dest='config_file',
+                            help='path to JSON config file')
+        parser.add_argument('-m', '--mode', choices=('import', 'index', 'reset'),
                             dest='mode',
                             help=(
                                 'import: import files from source dirs to target dir and index \n'
@@ -249,35 +252,117 @@ class MediaGrabber:
                             help='directories to import from (use "" for names with spaces)')
         parser.add_argument('-t', '--targetdir', dest='target_dir',
                             help='directory to import to (indexed)')
-        parser.add_argument('-e', '--extensions', nargs='+', default='jpg', dest='file_extensions',
+        parser.add_argument('-e', '--extensions', nargs='+', dest='file_extensions',
                             help='list of file extensions to import (default: jpg)')
         parser.add_argument('-i', '--ignore-dirs', nargs='+', dest='ignore_dirs',
                             help='dirname patterns for subdirectories which should not be imported')
-        parser.add_argument('-r', '--remove-sources', action='store_true', default=False, dest='move',
+        parser.add_argument('-r', '--remove-sources', action='store_true', default=None, dest='move',
                             help='if this option is added, source files are moved to target (instead of copied)!')
-        parser.add_argument('-p', '--probe', action='store_true', default=False, dest='sim',
+        parser.add_argument('-p', '--probe', action='store_true', default=None, dest='sim',
                             help='probe: do no touch files - preview only')
         parser.add_argument('-l', '--logfile', nargs='?', dest='logfile', const='mediagrabber.log',
                             help='write logfile (optional: specify logfile)')
-        parser.add_argument('-v', '--verbose', action='store_true', default=False, dest='verbose',
+        parser.add_argument('-v', '--verbose', action='store_true', default=None, dest='verbose',
                             help='verbose: output more information, e.g. skipped files')
-        parser.add_argument('-q', '--quiet', action='store_true', default=False, dest='quiet',
+        parser.add_argument('-q', '--quiet', action='store_true', default=None, dest='quiet',
                             help='quiet: suppress all output to console')
-        parser.add_argument('-d', '--debug', action='store_true', dest='debug',
+        parser.add_argument('-d', '--debug', action='store_true', default=None, dest='debug',
                             help='debug: write a detailed logfile for debugging')
         args = parser.parse_args()
 
-        self.mode = args.mode
-        self.source_dirs = args.source_dirs
-        self.target_dir = args.target_dir
-        self.file_extensions = args.file_extensions
-        self.ignore_subfolder_patterns = args.ignore_dirs
-        self.move = args.move
-        self.simulate = args.sim
-        self.logfile_name = args.logfile
-        self.quiet = args.quiet
-        self.verbose = args.verbose
-        self.debug = args.debug
+        config = self._read_config_file(args.config_file)
+
+        self.mode = self._get_setting(config, args, 'mode', self.mode)
+        self.source_dirs = self._get_setting(config, args, 'source_dirs', self.source_dirs)
+        self.target_dir = self._get_setting(config, args, 'target_dir', self.target_dir)
+        self.file_extensions = self._get_setting(config, args, 'file_extensions', ['jpg'])
+        self.ignore_subfolder_patterns = self._get_setting(config, args, 'ignore_dirs',
+                                                           self.ignore_subfolder_patterns)
+        self.move = self._get_setting(config, args, 'move', self.move)
+        self.simulate = self._get_setting(config, args, 'sim', self.simulate)
+        self.logfile_name = self._get_setting(config, args, 'logfile')
+        self.quiet = self._get_setting(config, args, 'quiet', self.quiet)
+        self.verbose = self._get_setting(config, args, 'verbose', self.verbose)
+        self.debug = self._get_setting(config, args, 'debug', self.debug)
+
+        self.source_dirs = self._normalize_list(self.source_dirs)
+        self.file_extensions = self._normalize_list(self.file_extensions)
+        self.ignore_subfolder_patterns = self._normalize_list(self.ignore_subfolder_patterns)
+
+        if self.mode not in ('import', 'index', 'reset'):
+            raise SystemExit('unknown mode in config: <' + str(self.mode) + '>')
+
+    def _read_config_file(self, config_file):
+        """
+        Read run settings from a JSON config file.
+        Commandline options override values from this file.
+        """
+        if config_file is None:
+            return {}
+
+        config_file = os.path.abspath(config_file)
+        if not os.path.isfile(config_file):
+            raise SystemExit('config file not found: <' + config_file + '>')
+
+        with open(config_file, encoding='utf-8') as f:
+            config = json.load(f)
+
+        if not isinstance(config, dict):
+            raise SystemExit('config file must contain a JSON object')
+
+        valid_keys = {
+            'mode',
+            'source_dirs',
+            'sourcedirs',
+            'target_dir',
+            'targetdir',
+            'file_extensions',
+            'extensions',
+            'ignore_dirs',
+            'ignore_subfolder_patterns',
+            'move',
+            'remove_sources',
+            'simulate',
+            'probe',
+            'logfile',
+            'quiet',
+            'verbose',
+            'debug'
+        }
+        unknown_keys = sorted(set(config.keys()) - valid_keys)
+        if unknown_keys:
+            raise SystemExit('unknown config setting(s): ' + ', '.join(unknown_keys))
+
+        return config
+
+    @staticmethod
+    def _get_setting(config, args, setting_name, default=None):
+        config_aliases = {
+            'source_dirs': ('source_dirs', 'sourcedirs'),
+            'target_dir': ('target_dir', 'targetdir'),
+            'file_extensions': ('file_extensions', 'extensions'),
+            'ignore_dirs': ('ignore_dirs', 'ignore_subfolder_patterns'),
+            'move': ('move', 'remove_sources'),
+            'sim': ('simulate', 'probe'),
+        }
+
+        cli_value = getattr(args, setting_name, None)
+        if cli_value is not None:
+            return cli_value
+
+        for key in config_aliases.get(setting_name, (setting_name,)):
+            if key in config:
+                return config[key]
+
+        return default
+
+    @staticmethod
+    def _normalize_list(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
 
     @staticmethod
     def _filter_file_by_ext(the_file, filter_ext=None):

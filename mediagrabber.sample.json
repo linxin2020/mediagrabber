@@ -1,0 +1,23 @@
+{
+  "mode": "import",
+  "source_dirs": [
+    "C:\\Users\\Thomas\\Dropbox\\Camera-Uploads",
+    "C:\\Users\\Thomas\\Other Photos"
+  ],
+  "target_dir": "C:\\Users\\Thomas\\Photos\\My awesome photo collection",
+  "file_extensions": [
+    "jpg",
+    "jpeg"
+  ],
+  "ignore_dirs": [
+    "Camera-Uploads\\old images",
+    "archive",
+    ".svn"
+  ],
+  "remove_sources": false,
+  "probe": false,
+  "logfile": "mediagrabber.log",
+  "quiet": false,
+  "verbose": false,
+  "debug": false
+}

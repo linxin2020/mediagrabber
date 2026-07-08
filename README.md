@@ -4,58 +4,70 @@ source directories into a target directory, renames them by their EXIF create da
 based on their creation dates - while keeping records of sources and target files in an index file (database) to
 speed up things for the following runs.
 
-## Usage / Command line Options
-The following commandline options and flags control the tool's behavior 
+## Usage / Config File
 
-Option | Long | Value | Description
-:---: | :--- | :--- | :---
--m | --mode | `import` | import files from source dirs to target dir and index
-| " |   "    | `index` | validate/update target index
-| " |    "    | `reset` | reset sources: remove all source infos (but keep target index)
--s | --sourcedirs | *list of source directories* | list of directory paths to import from (use "" for paths with spaces), separate different paths by spaces
--t | --targetdir | *target directory* | directory to import to and to store the index file
--e | --extensions | *list of file extensions, separated by spaces* | list of file extensions to import to target (default: jpg)
--i | --ignore-dirs | *list of patterns, separated by spaces* | exclude patterns to filter subdirectories which should not be imported
--r | --remove-sources | `none` | move (instead of copy) files from source to target
--p | --probe | `none` | do no touch files - preview only
--q | --quiet | `none` | no processing output to console
--v | --verbose | `none` | output verbose processing information to console
--l | --logfile | *(optional: logfile)* | write logfile (optional: specify logfile name)
--d | --debug | `none` | create detailed debug logfile
+Create a JSON config file and run mediagrabber with the `--config` option:
+
+```
+python3 ./mediagrabber.py --config mediagrabber.json
+```
+
+See `mediagrabber.sample.json` for a complete example.
+
+The following config settings control the tool's behavior:
+
+Setting | Value | Description
+:--- | :--- | :---
+mode | `import` | import files from source dirs to target dir and index
+" | `index` | validate/update target index
+" | `reset` | reset sources: remove all source infos (but keep target index)
+source_dirs | *list of source directories* | list of directory paths to import from
+target_dir | *target directory* | directory to import to and to store the index file
+file_extensions | *list of file extensions* | list of file extensions to import to target (default: jpg)
+ignore_dirs | *list of patterns* | exclude patterns to filter subdirectories which should not be imported
+remove_sources | `true` / `false` | move (instead of copy) files from source to target
+probe | `true` / `false` | do no touch files - preview only
+quiet | `true` / `false` | no processing output to console
+verbose | `true` / `false` | output verbose processing information to console
+logfile | *logfile path* | write logfile
+debug | `true` / `false` | create detailed debug logfile
+
+Command line options are still available and override values from the config file when both are provided.
 
 
 ## Examples
 
 * Import files from sources to target:
     ```
-    python3 ./mediagrabber.py
-    -m import 
-    -s "C:\Users\Thomas\Dropbox\Camera-Uploads" "C:\Users\Thomas\Other Photos"
-    -t "C:\Users\Thomas\Photos\My awesome photo collection"
-    -e jpg jpeg
-    -i "Camera-Uploads\old images" archive .svn
+    python3 ./mediagrabber.py --config mediagrabber.json
+    ```
+
+    Example `mediagrabber.json`:
+    ```
+    {
+      "mode": "import",
+      "source_dirs": [
+        "C:\\Users\\Thomas\\Dropbox\\Camera-Uploads",
+        "C:\\Users\\Thomas\\Other Photos"
+      ],
+      "target_dir": "C:\\Users\\Thomas\\Photos\\My awesome photo collection",
+      "file_extensions": ["jpg", "jpeg"],
+      "ignore_dirs": ["Camera-Uploads\\old images", "archive", ".svn"]
+    }
     ```
     
 
 * Run import job as scheduled task on a Synology NAS:
     ```
     export LANG=en_US.UTF-8
-    python3 /volume1/homes/admin/scripts/python/mediagrabber/mediagrabber.py
-    -m import 
-    -s /volume1/homes/thomas/Dropbox/Camera-Uploads 
-    -t /volume1/photo
-    -e jpg jpeg
-    -i @eaDir \.svn __ 
-    -q >> /volume1/homes/admin/scripts/python/mediagrabber/photograbber.out 2>&1
+    python3 /volume1/homes/admin/scripts/python/mediagrabber/mediagrabber.py \
+      --config /volume1/homes/admin/scripts/python/mediagrabber/mediagrabber.json \
+      >> /volume1/homes/admin/scripts/python/mediagrabber/photograbber.out 2>&1
     ```
 
 * Rebuild index of target files (e.g. after having cleaned up some of those real bad photos =) :
      ```
-    python3 ./mediagrabber.py
-    -m index
-    -t /volume1/photo
-    -e jpg jpeg
-    -i @eaDir \.svn __
+    python3 ./mediagrabber.py --config mediagrabber-index.json
     ```
 ## How the Code works
 When starting the tool for the first time, you would typically do this in `import` mode, specifiying
