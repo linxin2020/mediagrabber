@@ -164,6 +164,9 @@ class MediaGrabber:
         elif self.mode == 'reset':
             self._reset_sources()
 
+        elif self.mode == 'check':
+            self._check_indexs()
+
         else:
             self.logger.error('unknown mode!')
 
@@ -244,12 +247,13 @@ class MediaGrabber:
         parser = argparse.ArgumentParser(description='A media grabber program')
         parser.add_argument('-c', '--config', dest='config_file',
                             help='path to JSON config file')
-        parser.add_argument('-m', '--mode', choices=('import', 'index', 'reset'),
+        parser.add_argument('-m', '--mode', choices=('import', 'index', 'reset', 'check'),
                             dest='mode',
                             help=(
                                 'import: import files from source dirs to target dir and index \n'
                                 'index: validate/update target index \n'
-                                'reset: reset sources: remove all source infos (but keep target index)'
+                                'reset: reset sources: remove all source infos (but keep target index) \n'
+                                'check: check target file by index'
                             ))
         parser.add_argument('-s', '--sourcedirs', nargs='+', dest='source_dirs',
                             help='directories to import from (use "" for names with spaces)')
@@ -295,7 +299,7 @@ class MediaGrabber:
         self.file_extensions = self._normalize_list(self.file_extensions)
         self.ignore_subfolder_patterns = self._normalize_list(self.ignore_subfolder_patterns)
 
-        if self.mode not in ('import', 'index', 'reset'):
+        if self.mode not in ('import', 'index', 'reset', 'check'):
             raise SystemExit('unknown mode in config: <' + str(self.mode) + '>')
 
     def _read_config_file(self, config_file):
@@ -817,6 +821,31 @@ class MediaGrabber:
         """
         self.db.drop_sources()
         self.logger.info('done - dropped all source infos')
+
+    def _check_indexs(self):
+        """
+        _check_indexs
+
+        :return:
+        """
+        page_number = 1
+        rows_per_page = 1000
+        while True:
+            page_data = self.db.get_target_paths_filenames_on_page(rows_per_page, page_number)
+            if len(page_data) == 0:
+                break
+            page_number += 1
+            for (file_id, target_path, target_filename) in page_data:
+                self.stats.db_count += 1
+                target_path = os.path.join(self.target_dir, target_path, target_filename)
+                if not os.path.exists(target_path):
+                    self.logger.warning('target file "' + target_path + '" is not exists!')
+                    if self.remove_duplicate is True:
+                        self.db.drop_target_record(file_id)
+                        self.stats.removed_db_entries += 1
+        self.logger.info('done - _check_indexs')
+        # display stats
+        self._show_stats()
 
     def _get_file_list(self, the_path):
         """

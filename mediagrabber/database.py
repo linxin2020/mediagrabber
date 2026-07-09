@@ -598,3 +598,18 @@ class DataBase:
         ).format(file_md5)
 
         return self.execute_sql(sql).fetchone()
+
+
+    def get_target_paths_filenames_on_page(self, rows_per_page, page_number):
+        """
+        get target paths filenames on page
+        """
+        offset = (page_number - 1) * rows_per_page
+
+        sql = (
+            'SELECT file_id, target_path, target_filename FROM file '
+            'LIMIT {0} '
+            'OFFSET {1}'
+        ).format(rows_per_page, offset)
+
+        return self.execute_sql(sql).fetchall()
