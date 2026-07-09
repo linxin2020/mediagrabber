@@ -15,6 +15,7 @@
     ".svn"
   ],
   "remove_sources": false,
+  "remove_duplicate": false,
   "probe": false,
   "logfile": "mediagrabber.log",
   "quiet": false,

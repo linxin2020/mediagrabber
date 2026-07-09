@@ -39,6 +39,7 @@ class MediaGrabber:
         self.quiet = False
         self.verbose = False
         self.move = False
+        self.remove_duplicate = False
         self.mode = 'import'
         self.source_dirs = []
         self.target_dir = ''
@@ -85,12 +86,13 @@ class MediaGrabber:
     def _init_stats(self):
         # set up stats counters
         self.stats = namedtuple('stats',
-                                ['file_count', 'total_file_size', 'db_count', 'skipped_files', 'removed_db_entries',
+                                ['file_count', 'total_file_size', 'db_count', 'skipped_files', 'deleted_files', 'removed_db_entries',
                                  'total_time_file', 'total_time_db'])
         self.stats.file_count = 0
         self.stats.total_file_size = 0
         self.stats.db_count = 0
         self.stats.skipped_files = 0
+        self.stats.deleted_files = 0
         self.stats.removed_db_entries = 0
         self.stats.total_time_file = 0
         self.stats.total_time_db = 0
@@ -227,6 +229,7 @@ class MediaGrabber:
         self.logger.info('> extensions = %s', self.file_extensions)
         self.logger.info('> ignored    = %s', self.ignore_subfolder_patterns)
         self.logger.info('> move       = %s', self.move)
+        self.logger.info('> remove duplicate = %s', self.remove_duplicate)
         self.logger.info('> dryrun     = %s', self.simulate)
         self.logger.info('> logfile    = %s', self.logfile_name)
         self.logger.info('> verbose    = %s', self.verbose)
@@ -258,6 +261,8 @@ class MediaGrabber:
                             help='dirname patterns for subdirectories which should not be imported')
         parser.add_argument('-r', '--remove-sources', action='store_true', default=None, dest='move',
                             help='if this option is added, source files are moved to target (instead of copied)!')
+        parser.add_argument('-f', '--remove-duplicate', action='store_true', default=None, dest='remove_duplicate',
+                            help='if this option is added, duplicate files are deleted!')
         parser.add_argument('-p', '--probe', action='store_true', default=None, dest='sim',
                             help='probe: do no touch files - preview only')
         parser.add_argument('-l', '--logfile', nargs='?', dest='logfile', const='mediagrabber.log',
@@ -279,6 +284,7 @@ class MediaGrabber:
         self.ignore_subfolder_patterns = self._get_setting(config, args, 'ignore_dirs',
                                                            self.ignore_subfolder_patterns)
         self.move = self._get_setting(config, args, 'move', self.move)
+        self.remove_duplicate = self._get_setting(config, args, 'remove_duplicate', self.remove_duplicate)
         self.simulate = self._get_setting(config, args, 'sim', self.simulate)
         self.logfile_name = self._get_setting(config, args, 'logfile')
         self.quiet = self._get_setting(config, args, 'quiet', self.quiet)
@@ -322,6 +328,7 @@ class MediaGrabber:
             'ignore_subfolder_patterns',
             'move',
             'remove_sources',
+            'remove_duplicate',
             'simulate',
             'probe',
             'logfile',
@@ -529,6 +536,7 @@ class MediaGrabber:
         total_files = 0
         file_count = 0
         skipped_count = 0
+        deleted_count = 0
         last_times = []
         avg_time = 0
         min_timer_samples = 10
@@ -581,7 +589,7 @@ class MediaGrabber:
                                                                                       '.1f') + '%): ' + my_file)
 
                 # check if source filename exists in db
-                if self.db.source_exists(my_file) and self.indexing_mode is False:
+                if self.db.source_exists(my_file) and self.indexing_mode is False and self.remove_duplicate is False:
                     # is known source, skip
                     skipped_count += 1
                     self._selective_logger('file is a known source - skipping')
@@ -609,11 +617,18 @@ class MediaGrabber:
                                     "duplicate found: original '" + db_fn + "' => removing duplicate: '" + my_file + "'")
                                 self._remove_file(my_file)
                         else:
-                            # add source entry for this file
-                            self._selective_logger("file is already in target as '" + db_fn + "'")
-                            self._selective_logger('added as new source')
-                            self.db.add_source(emf)
-                            # skip (no file operation)
+                            if  self.move is True and self.remove_duplicate is True:
+                                self._selective_logger("file is already in target as '" + db_fn + "'")
+                                self._selective_logger('delete duplicate source file')
+                                self._remove_file(my_file)
+                                deleted_count += 1
+                                skipped_count -= 1
+                            else:
+                                # add source entry for this file
+                                self._selective_logger("file is already in target as '" + db_fn + "'")
+                                self._selective_logger('added as new source')
+                                self.db.add_source(emf)
+                                # skip (no file operation)
                     else:
                         # md5 is different,
                         # insert file
@@ -650,6 +665,7 @@ class MediaGrabber:
         self.stats.total_time_file += total_time
         self.stats.file_count += file_count
         self.stats.skipped_files += skipped_count
+        self.stats.deleted_files += deleted_count
 
         # clean up
         et.terminate()
@@ -684,8 +700,9 @@ class MediaGrabber:
                 file_size_mb = self.stats.total_file_size / 1024 / 1024
                 self.logger.info('files')
                 self.logger.info('> total            : %s', str(self.stats.file_count))
-                self.logger.info('> added            : %s', str(self.stats.file_count - self.stats.skipped_files))
+                self.logger.info('> added            : %s', str(self.stats.file_count - self.stats.skipped_files - self.stats.deleted_files))
                 self.logger.info('> skipped          : %s', str(self.stats.skipped_files))
+                self.logger.info('> deleted          : %s', str(self.stats.deleted_files))
                 self.logger.info('> added size       : %sMB', format(file_size_mb, '.2f'))
                 self.logger.info('> avg. time/file   : %ss',
                                  format(self.stats.total_time_file / self.stats.file_count, '.3f'))
