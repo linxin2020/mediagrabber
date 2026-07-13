@@ -117,7 +117,7 @@ class ExifMediaFile(ExifMixin, MediaFile):
 
         filename = ''
         if date_obj is not None:
-            filename = "{:%Y-%m-%d %H.%M.%S}".format(date_obj)
+            filename = "{:%Y%m%d-%H%M%S}".format(date_obj)
         return filename
 
 if __name__ == "__main__":
